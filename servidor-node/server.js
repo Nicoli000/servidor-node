@@ -7,6 +7,12 @@ const port = 3000;
 
 // Cria o servidor web
 const server = http.createServer((req, res) => {
+
+if (req.url === '/alunos'){
+    res.writeHead(200,{'Content-Type': 'text/html; charset=utf-8'});
+    return res.end('<h1>Lista de Alunos<h1>'); //O return impede a execução das linhas de baixo
+}
+
   // Define o status HTTP como 200 (OK) e o tipo de conteúdo como texto plano em UTF-8
 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
  
