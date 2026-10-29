@@ -116,6 +116,8 @@ app.post('/clientes', (req, res) => {
     const telefone = req.body.telefone;
     const enderecos = req.body.enderecos;
 
+
+
     if (!nome || !cpf || !email || !telefone) {
 
         return res.status(400).json({
