@@ -63,8 +63,32 @@ connection.connect((err) => {
         }
         console.log('Tabela endereco pronta!');
     });
+
+    const createProdutos = `
+        CREATE TABLE IF NOT EXISTS produtos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(150) NOT NULL,
+            categoria VARCHAR(100) NOT NULL,
+            marca VARCHAR(100) NOT NULL,
+            modelo VARCHAR(100) NOT NULL,
+            descricao TEXT,
+            preco DECIMAL(10,2) NOT NULL,
+            quantidade INT NOT NULL DEFAULT 0,
+            fornecedor_id INT
+        )
+    `;
+
+    connection.query(createProdutos, (err) => {
+        if (err) {
+            console.error('Erro ao criar tabela produtos:', err);
+            return;
+        }
+
+        console.log('Tabela produtos pronta!');
+    });
 });
 
+// CADASTRAR CLIENTES
 app.get('/clientes', (req, res) => {
     const sql = `
         SELECT
@@ -186,6 +210,7 @@ app.get('/clientes/:id/endereco', (req, res) => {
     });
 });
 
+// DASHBOARD
 app.get('/dashboard/resumo', (req, res) => {
     const sql = 'SELECT COUNT(*) AS clientes FROM clientes';
 
@@ -200,6 +225,195 @@ app.get('/dashboard/resumo', (req, res) => {
     });
 });
 
+// PRODUTOS - LISTAR
+app.get('/produtos', (req, res) => {
+    const sql = `
+        SELECT *
+        FROM produtos
+        ORDER BY id DESC
+    `;
+
+    connection.query(sql, (err, results) => {
+        if (err) {
+            return res.status(500).json({
+                erro: 'Erro ao buscar produtos'
+            });
+        }
+
+        res.json(results);
+    });
+});
+
+// PRODUTOS - BUSCAR POR ID
+app.get('/produtos/:id', (req, res) => {
+    const id = req.params.id;
+
+    const sql = 'SELECT * FROM produtos WHERE id = ?';
+
+    connection.query(sql, [id], (err, results) => {
+        if (err) {
+            return res.status(500).json({
+                erro: 'Erro ao buscar produto'
+            });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({
+                erro: 'Produto não encontrado'
+            });
+        }
+
+        res.json(results[0]);
+    });
+});
+
+// PRODUTOS - CADASTRAR
+app.post('/produtos', (req, res) => {
+    const {
+        nome,
+        categoria,
+        marca,
+        modelo,
+        descricao,
+        preco,
+        quantidade,
+        fornecedor_id
+    } = req.body;
+
+    if (!nome || !categoria || !marca || !modelo ||
+        preco === '' || preco === undefined ||
+        quantidade === '' || quantidade === undefined) {
+        return res.status(400).json({
+            erro: 'Preencha todos os campos obrigatórios'
+        });
+    }
+
+    const sql = `
+        INSERT INTO produtos
+        (nome, categoria, marca, modelo, descricao, preco, quantidade, fornecedor_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    connection.query(sql, [
+        nome,
+        categoria,
+        marca,
+        modelo,
+        descricao || null,
+        preco,
+        quantidade,
+        fornecedor_id || null
+    ], (err, resultado) => {
+        if (err) {
+            console.error('Erro ao cadastrar produto:', err);
+
+            return res.status(500).json({
+                erro: 'Erro ao cadastrar produto'
+            });
+        }
+
+        res.status(201).json({
+            mensagem: 'Produto cadastrado com sucesso!',
+            id: resultado.insertId
+        });
+    });
+});
+
+// PRODUTOS - EDITAR
+app.put('/produtos/:id', (req, res) => {
+    const id = req.params.id;
+
+    const {
+        nome,
+        categoria,
+        marca,
+        modelo,
+        descricao,
+        preco,
+        quantidade,
+        fornecedor_id
+    } = req.body;
+
+    if (!nome || !categoria || !marca || !modelo ||
+        preco === '' || preco === undefined ||
+        quantidade === '' || quantidade === undefined) {
+        return res.status(400).json({
+            erro: 'Preencha todos os campos obrigatórios'
+        });
+    }
+
+    const sql = `
+        UPDATE produtos
+        SET nome = ?,
+            categoria = ?,
+            marca = ?,
+            modelo = ?,
+            descricao = ?,
+            preco = ?,
+            quantidade = ?,
+            fornecedor_id = ?
+        WHERE id = ?
+    `;
+
+    connection.query(sql, [
+        nome,
+        categoria,
+        marca,
+        modelo,
+        descricao || null,
+        preco,
+        quantidade,
+        fornecedor_id || null,
+        id
+    ], (err, resultado) => {
+        if (err) {
+            console.error('Erro ao atualizar produto:', err);
+
+            return res.status(500).json({
+                erro: 'Erro ao atualizar produto'
+            });
+        }
+
+        if (resultado.affectedRows === 0) {
+            return res.status(404).json({
+                erro: 'Produto não encontrado'
+            });
+        }
+
+        res.json({
+            mensagem: 'Produto atualizado com sucesso!'
+        });
+    });
+});
+
+// PRODUTOS - EXCLUIR
+app.delete('/produtos/:id', (req, res) => {
+    const id = req.params.id;
+
+    const sql = 'DELETE FROM produtos WHERE id = ?';
+
+    connection.query(sql, [id], (err, resultado) => {
+        if (err) {
+            console.error('Erro ao excluir produto:', err);
+
+            return res.status(500).json({
+                erro: 'Erro ao excluir produto'
+            });
+        }
+
+        if (resultado.affectedRows === 0) {
+            return res.status(404).json({
+                erro: 'Produto não encontrado'
+            });
+        }
+
+        res.json({
+            mensagem: 'Produto excluído com sucesso!'
+        });
+    });
+});
+
+// PÁGINA INICIAL
 app.get('/', (req, res) => {
     res.send('Servidor TechParts funcionando!');
 });
