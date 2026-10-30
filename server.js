@@ -1,6 +1,7 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+const bcrypt = require ('bcrypt');
 
 const app = express();
 const port = 3000;
@@ -107,6 +108,26 @@ connection.connect((err) => {
 
         console.log('Tabela produtos pronta!');
     });
+    const createUsuarios = `
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL,
+        email VARCHAR(100) NOT NULL UNIQUE,
+        senha VARCHAR(255) NOT NULL,
+        tipo ENUM('administrador', 'cliente') DEFAULT 'cliente',
+        status ENUM('ativo', 'inativo') DEFAULT 'ativo',
+        data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+`;
+
+connection.query(createUsuarios, (err) => {
+    if (err) {
+        console.error('Erro ao criar tabela usuarios:', err);
+        return;
+    }
+
+    console.log('Tabela usuarios pronta!');
+});
 });
 
 // CADASTRAR CLIENTES
@@ -567,7 +588,134 @@ app.delete('/fornecedores/:id', (req, res) => {
         res.json({ mensagem: 'Fornecedor excluído com sucesso!' });
     });
 });
+// USUARIOS - CADASTRAR
+app.post('/usuarios', async (req, res) => {
+    const { nome, email, senha } = req.body;
 
+    if (!nome || !email || !senha) {
+        return res.status(400).json({
+            erro: 'Preencha todos os campos'
+        });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({
+            erro: 'E-mail inválido'
+        });
+    }
+
+    if (senha.length < 8) {
+        return res.status(400).json({
+            erro: 'A senha deve ter pelo menos 8 caracteres'
+        });
+    }
+
+    try {
+        const senhaHash = await bcrypt.hash(senha, 12);
+
+        const sql = `
+            INSERT INTO usuarios (nome, email, senha)
+            VALUES (?, ?, ?)
+        `;
+
+        connection.query(sql, [
+            nome.trim(),
+            email.trim().toLowerCase(),
+            senhaHash
+        ], (err, resultado) => {
+            if (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(400).json({
+                        erro: 'E-mail já cadastrado'
+                    });
+                }
+
+                return res.status(500).json({
+                    erro: 'Erro ao cadastrar usuário'
+                });
+            }
+
+            res.status(201).json({
+                mensagem: 'Usuário cadastrado com sucesso!',
+                id_usuario: resultado.insertId
+            });
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            erro: 'Erro ao proteger a senha'
+        });
+    }
+});
+
+// USUARIOS - LOGIN
+app.post('/login', (req, res) => {
+    const { email, senha } = req.body;
+
+    if (!email || !senha) {
+        return res.status(400).json({
+            erro: 'Informe e-mail e senha'
+        });
+    }
+
+    const sql = `
+        SELECT id_usuario, nome, email, senha, tipo, status
+        FROM usuarios
+        WHERE email = ?
+    `;
+
+    connection.query(sql, [
+        email.trim().toLowerCase()
+    ], async (err, resultados) => {
+        if (err) {
+            return res.status(500).json({
+                erro: 'Erro ao realizar login'
+            });
+        }
+
+        if (resultados.length === 0) {
+            return res.status(401).json({
+                erro: 'E-mail ou senha incorretos'
+            });
+        }
+
+        const usuario = resultados[0];
+
+        if (usuario.status !== 'ativo') {
+            return res.status(403).json({
+                erro: 'Conta inativa'
+            });
+        }
+
+        try {
+            const senhaCorreta = await bcrypt.compare(
+                senha,
+                usuario.senha
+            );
+
+            if (!senhaCorreta) {
+                return res.status(401).json({
+                    erro: 'E-mail ou senha incorretos'
+                });
+            }
+
+            res.json({
+                mensagem: 'Login realizado com sucesso!',
+                usuario: {
+                    id_usuario: usuario.id_usuario,
+                    nome: usuario.nome,
+                    email: usuario.email,
+                    tipo: usuario.tipo
+                }
+            });
+
+        } catch (err) {
+            res.status(500).json({
+                erro: 'Erro ao verificar senha'
+            });
+        }
+    });
+});
 // PÁGINA INICIAL
 app.get('/', (req, res) => {
     res.send('Servidor TechParts funcionando!');
