@@ -3,11 +3,9 @@ const mysql = require('mysql2');
 const cors = require('cors');
 
 const app = express();
-
 const port = 3000;
 
 app.use(cors());
-
 app.use(express.json());
 
 const connection = mysql.createConnection({
@@ -18,11 +16,8 @@ const connection = mysql.createConnection({
 });
 
 connection.connect((err) => {
-
     if (err) {
-
-        console.error('Erro ao conectar ao MySQL: ', err.stack);
-
+        console.error('Erro ao conectar ao MySQL:', err.stack);
         return;
     }
 
@@ -39,14 +34,10 @@ connection.connect((err) => {
     `;
 
     connection.query(createClientes, (err) => {
-
         if (err) {
-
-            console.error('Erro ao criar tabela clientes: ', err.stack);
-
+            console.error('Erro ao criar tabela clientes:', err);
             return;
         }
-
         console.log('Tabela clientes pronta!');
     });
 
@@ -66,22 +57,17 @@ connection.connect((err) => {
     `;
 
     connection.query(createEndereco, (err) => {
-
         if (err) {
-
-            console.error('Erro ao criar tabela endereco: ', err.stack);
-
+            console.error('Erro ao criar tabela endereco:', err);
             return;
         }
-
         console.log('Tabela endereco pronta!');
     });
 });
 
 app.get('/clientes', (req, res) => {
-
     const sql = `
-        SELECT 
+        SELECT
             c.id_cliente,
             c.nome,
             c.cpf,
@@ -89,19 +75,14 @@ app.get('/clientes', (req, res) => {
             c.telefone,
             COUNT(e.id_endereco) AS quantidade_enderecos
         FROM clientes c
-        LEFT JOIN endereco e
-        ON c.id_cliente = e.id_cliente
+        LEFT JOIN endereco e ON c.id_cliente = e.id_cliente
         GROUP BY c.id_cliente
         ORDER BY c.id_cliente DESC
     `;
 
     connection.query(sql, (err, results) => {
-
         if (err) {
-
-            return res.status(500).json({
-                erro: 'Erro ao buscar clientes'
-            });
+            return res.status(500).json({ erro: 'Erro ao buscar clientes' });
         }
 
         res.json(results);
@@ -109,118 +90,83 @@ app.get('/clientes', (req, res) => {
 });
 
 app.post('/clientes', (req, res) => {
-
-    const nome = req.body.nome;
-    const cpf = req.body.cpf;
-    const email = req.body.email;
-    const telefone = req.body.telefone;
-    const enderecos = req.body.enderecos;
-
-
+    const { nome, cpf, email, telefone, enderecos } = req.body;
 
     if (!nome || !cpf || !email || !telefone) {
-
         return res.status(400).json({
             erro: 'Preencha todos os dados do cliente'
         });
     }
 
     const sqlCliente = `
-        INSERT INTO clientes
-        (nome, cpf, email, telefone)
+        INSERT INTO clientes (nome, cpf, email, telefone)
         VALUES (?, ?, ?, ?)
     `;
 
-    connection.query(
-        sqlCliente,
-        [nome, cpf, email, telefone],
-        (err, resultado) => {
+    connection.query(sqlCliente, [nome, cpf, email, telefone], (err, resultado) => {
+        if (err) {
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(400).json({
+                    erro: 'CPF ou e-mail já cadastrado'
+                });
+            }
 
-            if (err) {
+            return res.status(500).json({
+                erro: 'Erro ao cadastrar cliente'
+            });
+        }
 
-                if (err.code === 'ER_DUP_ENTRY') {
+        const idCliente = resultado.insertId;
 
-                    return res.status(400).json({
-                        erro: 'CPF ou e-mail já cadastrado'
+        if (!enderecos || enderecos.length === 0) {
+            return res.status(201).json({
+                mensagem: 'Cliente cadastrado com sucesso!',
+                id_cliente: idCliente
+            });
+        }
+
+        let quantidade = 0;
+        let erroEndereco = false;
+
+        enderecos.forEach((endereco) => {
+            const sqlEndereco = `
+                INSERT INTO endereco
+                (id_cliente, cep, rua, numero, bairro, cidade, uf, complemento)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+
+            connection.query(sqlEndereco, [
+                idCliente,
+                endereco.cep,
+                endereco.rua,
+                endereco.numero,
+                endereco.bairro,
+                endereco.cidade,
+                endereco.uf,
+                endereco.complemento
+            ], (err) => {
+                if (err) {
+                    erroEndereco = true;
+                    console.error('Erro ao cadastrar endereço:', err);
+                    return res.status(500).json({
+                        erro: 'Erro ao cadastrar endereço'
                     });
                 }
 
-                return res.status(500).json({
-                    erro: 'Erro ao cadastrar cliente'
-                });
-            }
+                quantidade++;
 
-            const idCliente = resultado.insertId;
-
-            if (!enderecos || enderecos.length === 0) {
-
-                return res.status(201).json({
-                    mensagem: 'Cliente cadastrado com sucesso!',
-                    id_cliente: idCliente
-                });
-            }
-
-            let quantidade = 0;
-
-            enderecos.forEach((endereco) => {
-
-                const sqlEndereco = `
-                    INSERT INTO endereco
-                    (
-                        id_cliente,
-                        cep,
-                        rua,
-                        numero,
-                        bairro,
-                        cidade,
-                        uf,
-                        complemento
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `;
-
-                connection.query(
-                    sqlEndereco,
-                    [
-                        idCliente,
-                        endereco.cep,
-                        endereco.rua,
-                        endereco.numero,
-                        endereco.bairro,
-                        endereco.cidade,
-                        endereco.uf,
-                        endereco.complemento
-                    ],
-                    (err) => {
-
-                        if (err) {
-
-                            console.error(
-                                'Erro ao cadastrar endereço: ',
-                                err
-                            );
-
-                            return;
-                        }
-
-                        quantidade++;
-
-                        if (quantidade === enderecos.length) {
-
-                            res.status(201).json({
-                                mensagem: 'Cliente e endereços cadastrados com sucesso!',
-                                id_cliente: idCliente
-                            });
-                        }
-                    }
-                );
+                if (quantidade === enderecos.length && !erroEndereco) {
+                    res.status(201).json({
+                        mensagem: 'Cliente e endereços cadastrados com sucesso!',
+                        id_cliente: idCliente
+                    });
+                }
             });
-        }
-    );
+        });
+    });
 });
 
 app.get('/clientes/:id/endereco', (req, res) => {
-
     const idCliente = req.params.id;
 
     const sql = `
@@ -230,9 +176,7 @@ app.get('/clientes/:id/endereco', (req, res) => {
     `;
 
     connection.query(sql, [idCliente], (err, results) => {
-
         if (err) {
-
             return res.status(500).json({
                 erro: 'Erro ao buscar endereços'
             });
@@ -242,11 +186,24 @@ app.get('/clientes/:id/endereco', (req, res) => {
     });
 });
 
+app.get('/dashboard/resumo', (req, res) => {
+    const sql = 'SELECT COUNT(*) AS clientes FROM clientes';
+
+    connection.query(sql, (err, resultado) => {
+        if (err) {
+            return res.status(500).json({
+                erro: 'Erro ao buscar resumo'
+            });
+        }
+
+        res.json(resultado[0]);
+    });
+});
+
 app.get('/', (req, res) => {
-  res.send('Servidor TechParts funcionando!');
+    res.send('Servidor TechParts funcionando!');
 });
 
 app.listen(port, () => {
-
     console.log(`Servidor rodando em http://localhost:${port}`);
 });
