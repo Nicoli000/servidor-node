@@ -64,6 +64,27 @@ connection.connect((err) => {
         console.log('Tabela endereco pronta!');
     });
 
+    const createFornecedores = `
+        CREATE TABLE IF NOT EXISTS fornecedores (
+            id_fornecedor INT AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(150) NOT NULL,
+            cnpj VARCHAR(18) NOT NULL UNIQUE,
+            email VARCHAR(100) NOT NULL,
+            telefone VARCHAR(20) NOT NULL,
+            endereco VARCHAR(200),
+            cidade VARCHAR(100),
+            uf VARCHAR(2)
+        )
+    `;
+
+    connection.query(createFornecedores, (err) => {
+        if (err) {
+            console.error('Erro ao criar tabela fornecedores:', err);
+            return;
+        }
+        console.log('Tabela fornecedores pronta!');
+    });
+
     const createProdutos = `
         CREATE TABLE IF NOT EXISTS produtos (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -413,6 +434,140 @@ app.delete('/produtos/:id', (req, res) => {
     });
 });
 
+// FORNECEDORES - LISTAR
+app.get('/fornecedores', (req, res) => {
+    const sql = 'SELECT * FROM fornecedores ORDER BY id_fornecedor DESC';
+
+    connection.query(sql, (err, results) => {
+        if (err) {
+            console.error('Erro ao buscar fornecedores:', err);
+            return res.status(500).json({ erro: 'Erro ao buscar fornecedores' });
+        }
+
+        res.json(results);
+    });
+});
+
+// FORNECEDORES - BUSCAR POR ID
+app.get('/fornecedores/:id', (req, res) => {
+    const id = req.params.id;
+    const sql = 'SELECT * FROM fornecedores WHERE id_fornecedor = ?';
+
+    connection.query(sql, [id], (err, results) => {
+        if (err) {
+            console.error('Erro ao buscar fornecedor:', err);
+            return res.status(500).json({ erro: 'Erro ao buscar fornecedor' });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ erro: 'Fornecedor não encontrado' });
+        }
+
+        res.json(results[0]);
+    });
+});
+
+// FORNECEDORES - CADASTRAR
+app.post('/fornecedores', (req, res) => {
+    const { nome, cnpj, email, telefone, endereco, cidade, uf } = req.body;
+
+    if (!nome || !cnpj || !email || !telefone) {
+        return res.status(400).json({
+            erro: 'Preencha nome, CNPJ, e-mail e telefone'
+        });
+    }
+
+    const sql = `
+        INSERT INTO fornecedores
+        (nome, cnpj, email, telefone, endereco, cidade, uf)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    connection.query(sql, [
+        nome, cnpj, email, telefone,
+        endereco || null, cidade || null, uf || null
+    ], (err, resultado) => {
+        if (err) {
+            console.error('Erro ao cadastrar fornecedor:', err);
+
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(400).json({ erro: 'CNPJ já cadastrado' });
+            }
+
+            return res.status(500).json({ erro: 'Erro ao cadastrar fornecedor' });
+        }
+
+        res.status(201).json({
+            mensagem: 'Fornecedor cadastrado com sucesso!',
+            id_fornecedor: resultado.insertId
+        });
+    });
+});
+
+// FORNECEDORES - EDITAR
+app.put('/fornecedores/:id', (req, res) => {
+    const id = req.params.id;
+    const { nome, cnpj, email, telefone, endereco, cidade, uf } = req.body;
+
+    if (!nome || !cnpj || !email || !telefone) {
+        return res.status(400).json({
+            erro: 'Preencha nome, CNPJ, e-mail e telefone'
+        });
+    }
+
+    const sql = `
+        UPDATE fornecedores
+        SET nome = ?,
+            cnpj = ?,
+            email = ?,
+            telefone = ?,
+            endereco = ?,
+            cidade = ?,
+            uf = ?
+        WHERE id_fornecedor = ?
+    `;
+
+    connection.query(sql, [
+        nome, cnpj, email, telefone,
+        endereco || null, cidade || null, uf || null, id
+    ], (err, resultado) => {
+        if (err) {
+            console.error('Erro ao atualizar fornecedor:', err);
+
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(400).json({ erro: 'CNPJ já cadastrado' });
+            }
+
+            return res.status(500).json({ erro: 'Erro ao atualizar fornecedor' });
+        }
+
+        if (resultado.affectedRows === 0) {
+            return res.status(404).json({ erro: 'Fornecedor não encontrado' });
+        }
+
+        res.json({ mensagem: 'Fornecedor atualizado com sucesso!' });
+    });
+});
+
+// FORNECEDORES - EXCLUIR
+app.delete('/fornecedores/:id', (req, res) => {
+    const id = req.params.id;
+    const sql = 'DELETE FROM fornecedores WHERE id_fornecedor = ?';
+
+    connection.query(sql, [id], (err, resultado) => {
+        if (err) {
+            console.error('Erro ao excluir fornecedor:', err);
+            return res.status(500).json({ erro: 'Erro ao excluir fornecedor' });
+        }
+
+        if (resultado.affectedRows === 0) {
+            return res.status(404).json({ erro: 'Fornecedor não encontrado' });
+        }
+
+        res.json({ mensagem: 'Fornecedor excluído com sucesso!' });
+    });
+});
+
 // PÁGINA INICIAL
 app.get('/', (req, res) => {
     res.send('Servidor TechParts funcionando!');
@@ -421,3 +576,4 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
     console.log(`Servidor rodando em http://localhost:${port}`);
 });
+
